@@ -1,3 +1,6 @@
+# Use Bash to handle secure password input (read -s)
+SHELL := /bin/bash
+
 # Optional cross-compiler prefix
 CROSS_COMPILE ?= 
 
@@ -55,4 +58,27 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | setup_sdl2 $(OBJ_DIR)
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all clean setup_sdl2
+# ==========================================
+# DEPLOY CONFIGURATION (UPLOAD TO CONSOLE)
+# ==========================================
+SSH_USER ?= ark
+SSH_HOST ?= 192.168.1.100
+DEST_DIR = /roms/ports
+
+deploy: $(TARGET)
+	@which sshpass > /dev/null || (echo "Error: sshpass tool is missing. Install it using: sudo apt install sshpass" && exit 1)
+	@if [ ! -f PadTester.sh ]; then echo "Error: Missing file PadTester.sh"; exit 1; fi
+	@read -p "Console IP Address [$(SSH_HOST)]: " host_input; \
+	HOST=$${host_input:-$(SSH_HOST)}; \
+	read -p "SSH User [$(SSH_USER)]: " user_input; \
+	USER=$${user_input:-$(SSH_USER)}; \
+	read -s -p "SSH Password (hidden): " pass_input; echo ""; \
+	echo "Establishing connection and creating directories..."; \
+	sshpass -p "$$pass_input" ssh -o StrictHostKeyChecking=no $$USER@$$HOST "mkdir -p $(DEST_DIR)/PadTester"; \
+	echo "Transferring the executable file..."; \
+	sshpass -p "$$pass_input" scp -o StrictHostKeyChecking=no $(TARGET) $$USER@$$HOST:$(DEST_DIR)/PadTester/; \
+	echo "Transferring the launch script..."; \
+	sshpass -p "$$pass_input" scp -o StrictHostKeyChecking=no PadTester.sh $$USER@$$HOST:$(DEST_DIR)/; \
+	echo "Successfully deployed. In EmulationStation, use the option: Update Games Lists"
+
+.PHONY: all clean setup_sdl2 deploy
